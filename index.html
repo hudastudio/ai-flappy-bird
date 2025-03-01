@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird with Face Control</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/3.21.0/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1/dist/face-api.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            flex-direction: column;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            overflow: hidden;
+            background-color: #70c5ce;
+            border: 3px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            display: none;
+        }
+        
+        #start-screen {
+            text-align: center;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 10px 5px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        #photo-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px 0;
+        }
+        
+        #user-photo, #photo-preview {
+            max-width: 150px;
+            max-height: 150px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border: 2px solid #333;
+        }
+        
+        #camera-feed {
+            width: 200px;
+            height: 150px;
+            border: 2px solid #333;
+            border-radius: 5px;
+            background-color: #777;
+            margin: 10px 0;
+        }
+        
+        #score-display {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+        
+        #face-detection {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            width: 200px;
+            height: 170px;
+            border: 2px solid #333;
+            border-radius: 5px;
+            background-color: #777;
+            display: none;
+        }
+        
+        #controls-hint {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+        }
+        
+        #game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 24px;
+            display: none;
+        }
+        
+        #game-over h2 {
+            margin-bottom: 10px;
+        }
+        
+        #final-score {
+            font-size: 36px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="start-screen">
+        <h1>Flappy Bird dengan Face Detection</h1>
+        <p>Gunakan wajah Anda untuk mengendalikan burung! Miringkan kepala Anda ke atas untuk membuat burung terbang.</p>
+        
+        <div>
+            <button id="upload-photo-btn">Upload Foto Kamu</button>
+            <button id="take-photo-btn">Buka Kamera</button>
+            <button id="skip-photo-btn">Pakai Burung Default</button>
+        </div>
+        
+        <div id="photo-container">
+            <input type="file" id="photo-input" accept="image/*" style="display: none;">
+            <video id="camera-feed" autoplay playsinline></video>
+            <button id="capture-btn" style="display: none;">Ambil Foto</button>
+            <img id="photo-preview" style="display: none;">
+            <button id="start-game-btn" style="display: none;">Mulai Game</button>
+        </div>
+    </div>
+    
+    <div id="game-container">
+        <div id="score-display">Score: 0</div>
+        <div id="controls-hint">Gerakkan kepala ke atas untuk terbang!</div>
+        <canvas id="game-canvas"></canvas>
+        <div id="game-over">
+            <h2>Game Over!</h2>
+            <div id="final-score">Score: 0</div>
+            <button id="restart-btn">Main Lagi?</button>
+        </div>
+    </div>
+    
+    <video id="face-detection" autoplay playsinline></video>
+
+    <script>
+        // Initialize the game once the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', init);
+        
+        function init() {
+            // Set up event listeners for the start screen buttons
+            uploadPhotoBtn.addEventListener('click', function() {
+                photoContainer.style.display = 'flex';
+                photoInput.style.display = 'block';
+                photoInput.click();
+            });
+            
+            photoInput.addEventListener('change', function(e) {
+                if (e.target.files && e.target.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        photoPreview.src = event.target.result;
+                        photoPreview.style.display = 'block';
+                        startGameBtn.style.display = 'block';
+                    };
+                    reader.readAsDataURL(e.target.files[0]);
+                }
+            });
+            
+            takePhotoBtn.addEventListener('click', function() {
+                photoContainer.style.display = 'flex';
+                startCamera();
+                captureBtn.style.display = 'block';
+            });
+            
+            captureBtn.addEventListener('click', capturePhoto);
+            
+            skipPhotoBtn.addEventListener('click', function() {
+                // Use default bird - yellowbird-midflap.png
+                birdImage.src = "sprites/yellowbird-midflap.png";
+                startGame();
+            });
+            
+            startGameBtn.addEventListener('click', function() {
+                // Use captured/uploaded photo as bird
+                birdImage.src = photoPreview.src;
+                startGame();
+            });
+            
+            restartBtn.addEventListener('click', resetGame);
+            
+            // Load face-api.js models
+            loadFaceDetectionModels();
+        }
+        
+        async function loadFaceDetectionModels() {
+            try {
+                // Change this line to use the CDN path instead of root path
+                const modelUrl = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+                await faceapi.nets.tinyFaceDetector.load(modelUrl);
+                console.log("Face detection models loaded successfully");
+                faceDetectionActive = false;
+            } catch (error) {
+                console.error("Error loading face detection models:", error);
+            }
+        }
+        
+        function startCamera() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(function(stream) {
+                        cameraFeed.srcObject = stream;
+                    })
+                    .catch(function(error) {
+                        console.error("Error accessing camera:", error);
+                        alert("Could not access camera. Please try uploading a photo instead.");
+                    });
+            } else {
+                alert("Your browser does not support camera access. Please try uploading a photo instead.");
+            }
+        }
+        
+        function capturePhoto() {
+            const canvas = document.createElement('canvas');
+            canvas.width = cameraFeed.videoWidth;
+            canvas.height = cameraFeed.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(cameraFeed, 0, 0, canvas.width, canvas.height);
+            
+            photoPreview.src = canvas.toDataURL('image/png');
+            photoPreview.style.display = 'block';
+            
+            // Stop camera stream
+            const stream = cameraFeed.srcObject;
+            if (stream) {
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+                cameraFeed.srcObject = null;
+            }
+            
+            cameraFeed.style.display = 'none';
+            captureBtn.style.display = 'none';
+            startGameBtn.style.display = 'block';
+        }
+        
+        function startGame() {
+            // Hide start screen and show game
+            startScreen.style.display = 'none';
+            gameContainer.style.display = 'block';
+            
+            // Set up the canvas
+            canvas = document.getElementById('game-canvas');
+            canvas.width = gameContainer.clientWidth;
+            canvas.height = gameContainer.clientHeight;
+            ctx = canvas.getContext('2d');
+            
+            // Initialize bird position
+            bird = {
+                x: canvas.width / 4,
+                y: canvas.height / 2,
+                width: 40,
+                height: 40,
+                velocity: 0,
+                gravity: gravity,
+                jump: -7
+            };
+            
+            // Reset game variables
+            score = 0;
+            pipes = [];
+            gameRunning = true;
+            scoreDisplay.textContent = "Score: 0";
+            gameOverScreen.style.display = 'none';
+            
+            // Add first pipe
+            addPipe();
+            
+            // Start face detection if supported and not already running
+            if (!faceDetectionActive) {
+                startFaceDetection();
+            }
+            
+            // Start game loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function startFaceDetection() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(function(stream) {
+                        faceDetectionVideo.srcObject = stream;
+                        faceDetectionVideo.style.display = 'block';
+                        usingFaceControl = true;
+                        faceDetectionActive = true;
+                        
+                        // Start face tracking
+                        if (!faceDetectionInterval) {
+                            faceDetectionInterval = setInterval(detectFace, 100);
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error("Error accessing camera for face detection:", error);
+                        alert("Could not access camera for face control. Using keyboard controls (Spacebar) instead.");
+                        setupKeyboardControls();
+                    });
+            } else {
+                alert("Your browser does not support camera access. Using keyboard controls (Spacebar) instead.");
+                setupKeyboardControls();
+            }
+        }
+        
+        async function detectFace() {
+            if (!faceDetectionVideo.srcObject) return;
+            
+            try {
+                const detections = await faceapi.detectSingleFace(
+                    faceDetectionVideo,
+                    new faceapi.TinyFaceDetectorOptions()
+                );
+                
+                if (detections) {
+                    const currentHeadY = detections.box.top;
+                    
+                    if (lastHeadY && currentHeadY < lastHeadY - headThreshold && gameRunning) {
+                        // Head moved up - only trigger jump if game is running
+                        birdJump();
+                    }
+                    
+                    lastHeadY = currentHeadY;
+                }
+            } catch (error) {
+                console.error("Error in face detection:", error);
+            }
+        }
+        
+        function setupKeyboardControls() {
+            document.addEventListener('keydown', function(e) {
+                if (e.code === 'Space' && gameRunning) {
+                    birdJump();
+                }
+            });
+            
+            // Also enable touch controls
+            gameContainer.addEventListener('touchstart', function() {
+                if (gameRunning) {
+                    birdJump();
+                }
+            });
+        }
+        
+        function birdJump() {
+            bird.velocity = bird.jump;
+            
+            // Play wing flap sound (if we had audio)
+            new Audio('audio/wing.ogg').play();
+        }
+        
+        function addPipe() {
+            // Gap between top and bottom pipes
+            const gap = 150;
+            
+            // Random position for the gap
+            const gapPosition = Math.floor(Math.random() * (canvas.height - gap - 200)) + 100;
+            
+            // Create top pipe
+            const topPipe = {
+                x: canvas.width,
+                y: 0,
+                width: 52,  // Width of the pipe sprite
+                height: gapPosition,
+                passed: false
+            };
+            
+            // Create bottom pipe
+            const bottomPipe = {
+                x: canvas.width,
+                y: gapPosition + gap,
+                width: 52,  // Width of the pipe sprite
+                height: canvas.height - (gapPosition + gap)
+            };
+            
+            // Add pipes to array
+            pipes.push({ top: topPipe, bottom: bottomPipe });
+        }
+        
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background
+            ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+            
+            // Update bird position
+            bird.velocity += bird.gravity;
+            bird.y += bird.velocity;
+            
+            // Draw bird (use animation frames if default bird is used)
+            if (birdImage.src.includes("yellowbird")) {
+                // Use animation for default bird
+                const frameIndex = Math.floor(Date.now() / 200) % 3;
+                const birdAnimationSrc = frameIndex === 0 ? "sprites/yellowbird-downflap.png" : 
+                                       frameIndex === 1 ? "sprites/yellowbird-midflap.png" : 
+                                       "sprites/yellowbird-upflap.png";
+                // Only update if different to avoid flickering
+                if (birdImage.src !== birdAnimationSrc) {
+                    birdImage.src = birdAnimationSrc;
+                }
+            }
+            ctx.drawImage(birdImage, bird.x, bird.y, bird.width, bird.height);
+            
+            // Check collision with floor or ceiling
+            if (bird.y + bird.height >= canvas.height - 112 || bird.y <= 0) {
+                gameOver();
+                return;
+            }
+            
+            // Draw ground
+            ctx.drawImage(groundImage, 0, canvas.height - 112, canvas.width, 112);
+            
+            // Update and draw pipes
+            for (let i = pipes.length - 1; i >= 0; i--) {
+                const pipe = pipes[i];
+                
+                // Move pipe
+                pipe.top.x -= gameSpeed;
+                pipe.bottom.x -= gameSpeed;
+                
+                // Draw pipes - note the top pipe needs to be flipped vertically
+                // Draw top pipe (flipped vertically)
+                ctx.save();
+                ctx.translate(pipe.top.x + pipe.top.width/2, pipe.top.y + pipe.top.height);
+                ctx.scale(1, -1);
+                ctx.drawImage(pipeTopImage, -pipe.top.width/2, 0, pipe.top.width, 320);
+                ctx.restore();
+                
+                // Draw bottom pipe
+                ctx.drawImage(pipeBottomImage, pipe.bottom.x, pipe.bottom.y, pipe.bottom.width, 320);
+                
+                // Check if pipe is out of screen
+                if (pipe.top.x + pipe.top.width < 0) {
+                    pipes.splice(i, 1);
+                }
+                
+                // Check if bird passed the pipe
+                if (!pipe.top.passed && pipe.top.x + pipe.top.width < bird.x) {
+                    pipe.top.passed = true;
+                    score++;
+                    scoreDisplay.textContent = "Score: " + score;
+                    
+                    // Play score sound (if we had audio)
+                    // new Audio('audio/point.ogg').play();
+                }
+                
+                // Check collision with pipes
+                if (checkCollision(bird, pipe.top) || checkCollision(bird, pipe.bottom)) {
+                    gameOver();
+                    return;
+                }
+            }
+            
+            // Add new pipe when needed
+            if (pipes.length === 0 || pipes[pipes.length - 1].top.x < canvas.width - 200) {
+                addPipe();
+            }
+            
+            // Continue game loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function checkCollision(bird, pipe) {
+            return bird.x < pipe.x + pipe.width &&
+                   bird.x + bird.width > pipe.x &&
+                   bird.y < pipe.y + pipe.height &&
+                   bird.y + bird.height > pipe.y;
+        }
+        
+        function gameOver() {
+            gameRunning = false;
+            finalScore.textContent = "Score: " + score;
+            gameOverScreen.style.display = 'flex';
+            
+            // Play hit and die sounds (if we had audio)
+            // new Audio('audio/hit.ogg').play();
+            // setTimeout(() => new Audio('audio/die.ogg').play(), 100);
+            
+            // Note: We no longer stop face detection at game over
+            // Face detection continues to run in the background
+        }
+        
+        function resetGame() {
+            // We don't stop the face detection anymore
+            // Just restart the game
+            startGame();
+        }
+        
+        // Game variables
+        let canvas, ctx;
+        let bird = {};
+        let pipes = [];
+        let score = 0;
+        let gameRunning = false;
+        let gameSpeed = 2;
+        let gravity = 0.4;
+        let birdImage = new Image();
+        let backgroundImage = new Image();
+        let pipeTopImage = new Image();
+        let pipeBottomImage = new Image();
+        let groundImage = new Image();
+        let scoreDigitImages = Array(10).fill().map(() => new Image());
+        let usingFaceControl = false;
+        let faceDetectionInterval = null;
+        let faceDetectionActive = false;
+        let lastHeadY = 0;
+        let headThreshold = 5;
+        
+        // Preload the digit images for the score
+        for (let i = 0; i < 10; i++) {
+            scoreDigitImages[i].src = `sprites/${i}.png`;
+        }
+        
+        // DOM elements
+        const startScreen = document.getElementById('start-screen');
+        const gameContainer = document.getElementById('game-container');
+        const photoContainer = document.getElementById('photo-container');
+        const uploadPhotoBtn = document.getElementById('upload-photo-btn');
+        const takePhotoBtn = document.getElementById('take-photo-btn');
+        const skipPhotoBtn = document.getElementById('skip-photo-btn');
+        const photoInput = document.getElementById('photo-input');
+        const cameraFeed = document.getElementById('camera-feed');
+        const captureBtn = document.getElementById('capture-btn');
+        const photoPreview = document.getElementById('photo-preview');
+        const startGameBtn = document.getElementById('start-game-btn');
+        const scoreDisplay = document.getElementById('score-display');
+        const gameOverScreen = document.getElementById('game-over');
+        const finalScore = document.getElementById('final-score');
+        const restartBtn = document.getElementById('restart-btn');
+        const faceDetectionVideo = document.getElementById('face-detection');
+        
+        // Load images
+        backgroundImage.src = "sprites/background-day.png";
+        pipeTopImage.src = "sprites/pipe-green.png";
+        pipeBottomImage.src = "sprites/pipe-green.png";
+        groundImage.src = "sprites/base.png";
+    </script>
+</body>
+</html>
