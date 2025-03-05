@@ -141,6 +141,59 @@
             margin-bottom: 20px;
             font-weight: bold;
         }
+        
+        /* Speed Settings Modal Styles */
+        #speed-settings-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background-color: white;
+            padding: 25px;
+            border-radius: 8px;
+            width: 300px;
+            text-align: center;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .speed-option {
+            margin: 15px 0;
+        }
+        
+        #speed-settings-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: #ff9800;
+            padding: 5px 10px;
+            font-size: 14px;
+            z-index: 15;
+        }
+        
+        .slider-container {
+            width: 100%;
+            margin: 20px 0;
+        }
+        
+        #speed-slider {
+            width: 100%;
+            height: 15px;
+        }
+        
+        #speed-value {
+            font-weight: bold;
+            font-size: 18px;
+            color: #4CAF50;
+        }
     </style>
 </head>
 <body>
@@ -152,6 +205,7 @@
             <button id="upload-photo-btn">Upload Foto Kamu</button>
             <button id="take-photo-btn">Buka Kamera</button>
             <button id="skip-photo-btn">Pakai Burung Default</button>
+            <button id="settings-btn">Pengaturan Kecepatan</button>
         </div>
         
         <div id="photo-container">
@@ -165,12 +219,26 @@
     
     <div id="game-container">
         <div id="score-display">Score: 0</div>
+        <button id="speed-settings-btn">Speed</button>
         <div id="controls-hint">Gerakkan kepala ke atas untuk terbang!</div>
         <canvas id="game-canvas"></canvas>
         <div id="game-over">
             <h2>Game Over!</h2>
             <div id="final-score">Score: 0</div>
             <button id="restart-btn">Main Lagi?</button>
+        </div>
+    </div>
+    
+    <!-- Speed Settings Modal -->
+    <div id="speed-settings-modal">
+        <div class="modal-content">
+            <h3>Pengaturan Kecepatan</h3>
+            <div class="slider-container">
+                <input type="range" min="1" max="5" step="0.5" value="2" id="speed-slider">
+                <p>Kecepatan: <span id="speed-value">2</span></p>
+            </div>
+            <button id="save-speed-btn">Simpan</button>
+            <button id="cancel-speed-btn">Batal</button>
         </div>
     </div>
     
@@ -222,8 +290,45 @@
             
             restartBtn.addEventListener('click', resetGame);
             
+            // Setup speed settings
+            settingsBtn.addEventListener('click', openSpeedSettings);
+            speedSettingsBtn.addEventListener('click', openSpeedSettings);
+            saveSpeedBtn.addEventListener('click', saveSpeedSettings);
+            cancelSpeedBtn.addEventListener('click', closeSpeedSettings);
+            
+            // Update speed value display when slider changes
+            speedSlider.addEventListener('input', function() {
+                speedValue.textContent = this.value;
+            });
+            
             // Load face-api.js models
             loadFaceDetectionModels();
+        }
+        
+        function openSpeedSettings() {
+            // Set slider value to current game speed
+            speedSlider.value = gameSpeed;
+            speedValue.textContent = gameSpeed;
+            speedSettingsModal.style.display = 'flex';
+        }
+        
+        function closeSpeedSettings() {
+            speedSettingsModal.style.display = 'none';
+        }
+        
+        function saveSpeedSettings() {
+            // Update game speed from slider value
+            gameSpeed = parseFloat(speedSlider.value);
+            
+            // Update gravity based on speed to maintain balanced gameplay
+            gravity = 0.3 + (gameSpeed * 0.05);
+            
+            // If the game is running, update the bird's gravity
+            if (gameRunning && bird) {
+                bird.gravity = gravity;
+            }
+            
+            closeSpeedSettings();
         }
         
         async function loadFaceDetectionModels() {
@@ -385,7 +490,7 @@
             bird.velocity = bird.jump;
             
             // Play wing flap sound (if we had audio)
-            new Audio('audio/wing.ogg').play();
+            // new Audio('audio/wing.ogg').play();
         }
         
         function addPipe() {
@@ -560,6 +665,7 @@
         const uploadPhotoBtn = document.getElementById('upload-photo-btn');
         const takePhotoBtn = document.getElementById('take-photo-btn');
         const skipPhotoBtn = document.getElementById('skip-photo-btn');
+        const settingsBtn = document.getElementById('settings-btn');
         const photoInput = document.getElementById('photo-input');
         const cameraFeed = document.getElementById('camera-feed');
         const captureBtn = document.getElementById('capture-btn');
@@ -570,6 +676,14 @@
         const finalScore = document.getElementById('final-score');
         const restartBtn = document.getElementById('restart-btn');
         const faceDetectionVideo = document.getElementById('face-detection');
+        
+        // Speed settings elements
+        const speedSettingsModal = document.getElementById('speed-settings-modal');
+        const speedSettingsBtn = document.getElementById('speed-settings-btn');
+        const speedSlider = document.getElementById('speed-slider');
+        const speedValue = document.getElementById('speed-value');
+        const saveSpeedBtn = document.getElementById('save-speed-btn');
+        const cancelSpeedBtn = document.getElementById('cancel-speed-btn');
         
         // Load images
         backgroundImage.src = "sprites/background-day.png";
