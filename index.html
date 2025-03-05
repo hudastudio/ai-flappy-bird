@@ -184,15 +184,45 @@
             margin: 20px 0;
         }
         
-        #speed-slider {
+        .slider-container label {
+            display: block;
+            text-align: left;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .slider-container input[type="range"] {
             width: 100%;
             height: 15px;
         }
         
-        #speed-value {
+        .value-display {
             font-weight: bold;
             font-size: 18px;
             color: #4CAF50;
+        }
+        
+        .difficulty-presets {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+        }
+        
+        .difficulty-presets button {
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        
+        .easy-preset {
+            background-color: #4CAF50;
+        }
+        
+        .normal-preset {
+            background-color: #2196F3;
+        }
+        
+        .hard-preset {
+            background-color: #f44336;
         }
     </style>
 </head>
@@ -217,6 +247,7 @@
         </div>
     </div>
     
+    <h1>AI Flappy Bird Deteksi Wajah</h1>
     <div id="game-container">
         <div id="score-display">Score: 0</div>
         <button id="speed-settings-btn">Speed</button>
@@ -233,10 +264,25 @@
     <div id="speed-settings-modal">
         <div class="modal-content">
             <h3>Pengaturan Kecepatan</h3>
+            
             <div class="slider-container">
+                <label for="speed-slider">Kecepatan Game:</label>
                 <input type="range" min="1" max="5" step="0.5" value="2" id="speed-slider">
-                <p>Kecepatan: <span id="speed-value">2</span></p>
+                <p>Kecepatan: <span id="speed-value" class="value-display">2</span></p>
             </div>
+            
+            <div class="slider-container">
+                <label for="gravity-slider">Kecepatan Jatuh:</label>
+                <input type="range" min="0.1" max="0.8" step="0.1" value="0.4" id="gravity-slider">
+                <p>Gravitasi: <span id="gravity-value" class="value-display">0.4</span></p>
+            </div>
+            
+            <div class="difficulty-presets">
+                <button id="easy-preset" class="easy-preset">Mudah</button>
+                <button id="normal-preset" class="normal-preset">Normal</button>
+                <button id="hard-preset" class="hard-preset">Sulit</button>
+            </div>
+            
             <button id="save-speed-btn">Simpan</button>
             <button id="cancel-speed-btn">Batal</button>
         </div>
@@ -249,6 +295,9 @@
         document.addEventListener('DOMContentLoaded', init);
         
         function init() {
+            // Initialize all DOM elements first
+            initDOMElements();
+            
             // Set up event listeners for the start screen buttons
             uploadPhotoBtn.addEventListener('click', function() {
                 photoContainer.style.display = 'flex';
@@ -296,9 +345,26 @@
             saveSpeedBtn.addEventListener('click', saveSpeedSettings);
             cancelSpeedBtn.addEventListener('click', closeSpeedSettings);
             
-            // Update speed value display when slider changes
+            // Setup difficulty presets
+            easyPresetBtn.addEventListener('click', function() {
+                setDifficultyPreset('easy');
+            });
+            
+            normalPresetBtn.addEventListener('click', function() {
+                setDifficultyPreset('normal');
+            });
+            
+            hardPresetBtn.addEventListener('click', function() {
+                setDifficultyPreset('hard');
+            });
+            
+            // Update slider value displays when changed
             speedSlider.addEventListener('input', function() {
                 speedValue.textContent = this.value;
+            });
+            
+            gravitySlider.addEventListener('input', function() {
+                gravityValue.textContent = this.value;
             });
             
             // Load face-api.js models
@@ -306,9 +372,13 @@
         }
         
         function openSpeedSettings() {
-            // Set slider value to current game speed
+            // Set slider values to current game settings
             speedSlider.value = gameSpeed;
             speedValue.textContent = gameSpeed;
+            
+            gravitySlider.value = gravity;
+            gravityValue.textContent = gravity;
+            
             speedSettingsModal.style.display = 'flex';
         }
         
@@ -317,11 +387,9 @@
         }
         
         function saveSpeedSettings() {
-            // Update game speed from slider value
+            // Update game speed from slider values
             gameSpeed = parseFloat(speedSlider.value);
-            
-            // Update gravity based on speed to maintain balanced gameplay
-            gravity = 0.3 + (gameSpeed * 0.05);
+            gravity = parseFloat(gravitySlider.value);
             
             // If the game is running, update the bird's gravity
             if (gameRunning && bird) {
@@ -329,6 +397,27 @@
             }
             
             closeSpeedSettings();
+        }
+        
+        function setDifficultyPreset(preset) {
+            switch(preset) {
+                case 'easy':
+                    speedSlider.value = 1.5;
+                    gravitySlider.value = 0.2;
+                    break;
+                case 'normal':
+                    speedSlider.value = 2;
+                    gravitySlider.value = 0.4;
+                    break;
+                case 'hard':
+                    speedSlider.value = 3;
+                    gravitySlider.value = 0.6;
+                    break;
+            }
+            
+            // Update displayed values
+            speedValue.textContent = speedSlider.value;
+            gravityValue.textContent = gravitySlider.value;
         }
         
         async function loadFaceDetectionModels() {
@@ -392,6 +481,10 @@
             canvas.height = gameContainer.clientHeight;
             ctx = canvas.getContext('2d');
             
+            // Calculate jump strength based on gravity
+            // Lower gravity needs less powerful jumps
+            const jumpStrength = -5 - (gravity * 5);
+            
             // Initialize bird position
             bird = {
                 x: canvas.width / 4,
@@ -400,7 +493,7 @@
                 height: 40,
                 velocity: 0,
                 gravity: gravity,
-                jump: -7
+                jump: jumpStrength
             };
             
             // Reset game variables
@@ -653,37 +746,53 @@
         let lastHeadY = 0;
         let headThreshold = 5;
         
+        // DOM elements - defined early to avoid reference errors
+        let startScreen, gameContainer, photoContainer, uploadPhotoBtn, takePhotoBtn;
+        let skipPhotoBtn, settingsBtn, photoInput, cameraFeed, captureBtn;
+        let photoPreview, startGameBtn, scoreDisplay, gameOverScreen, finalScore;
+        let restartBtn, faceDetectionVideo, speedSettingsModal, speedSettingsBtn;
+        let speedSlider, speedValue, gravitySlider, gravityValue, saveSpeedBtn;
+        let cancelSpeedBtn, easyPresetBtn, normalPresetBtn, hardPresetBtn;
+        
         // Preload the digit images for the score
         for (let i = 0; i < 10; i++) {
             scoreDigitImages[i].src = `sprites/${i}.png`;
         }
         
-        // DOM elements
-        const startScreen = document.getElementById('start-screen');
-        const gameContainer = document.getElementById('game-container');
-        const photoContainer = document.getElementById('photo-container');
-        const uploadPhotoBtn = document.getElementById('upload-photo-btn');
-        const takePhotoBtn = document.getElementById('take-photo-btn');
-        const skipPhotoBtn = document.getElementById('skip-photo-btn');
-        const settingsBtn = document.getElementById('settings-btn');
-        const photoInput = document.getElementById('photo-input');
-        const cameraFeed = document.getElementById('camera-feed');
-        const captureBtn = document.getElementById('capture-btn');
-        const photoPreview = document.getElementById('photo-preview');
-        const startGameBtn = document.getElementById('start-game-btn');
-        const scoreDisplay = document.getElementById('score-display');
-        const gameOverScreen = document.getElementById('game-over');
-        const finalScore = document.getElementById('final-score');
-        const restartBtn = document.getElementById('restart-btn');
-        const faceDetectionVideo = document.getElementById('face-detection');
-        
-        // Speed settings elements
-        const speedSettingsModal = document.getElementById('speed-settings-modal');
-        const speedSettingsBtn = document.getElementById('speed-settings-btn');
-        const speedSlider = document.getElementById('speed-slider');
-        const speedValue = document.getElementById('speed-value');
-        const saveSpeedBtn = document.getElementById('save-speed-btn');
-        const cancelSpeedBtn = document.getElementById('cancel-speed-btn');
+        // DOM element initialization function - to be called in init()
+        function initDOMElements() {
+            // Game elements
+            startScreen = document.getElementById('start-screen');
+            gameContainer = document.getElementById('game-container');
+            photoContainer = document.getElementById('photo-container');
+            uploadPhotoBtn = document.getElementById('upload-photo-btn');
+            takePhotoBtn = document.getElementById('take-photo-btn');
+            skipPhotoBtn = document.getElementById('skip-photo-btn');
+            settingsBtn = document.getElementById('settings-btn');
+            photoInput = document.getElementById('photo-input');
+            cameraFeed = document.getElementById('camera-feed');
+            captureBtn = document.getElementById('capture-btn');
+            photoPreview = document.getElementById('photo-preview');
+            startGameBtn = document.getElementById('start-game-btn');
+            scoreDisplay = document.getElementById('score-display');
+            gameOverScreen = document.getElementById('game-over');
+            finalScore = document.getElementById('final-score');
+            restartBtn = document.getElementById('restart-btn');
+            faceDetectionVideo = document.getElementById('face-detection');
+            
+            // Speed settings elements
+            speedSettingsModal = document.getElementById('speed-settings-modal');
+            speedSettingsBtn = document.getElementById('speed-settings-btn');
+            speedSlider = document.getElementById('speed-slider');
+            speedValue = document.getElementById('speed-value');
+            gravitySlider = document.getElementById('gravity-slider');
+            gravityValue = document.getElementById('gravity-value');
+            saveSpeedBtn = document.getElementById('save-speed-btn');
+            cancelSpeedBtn = document.getElementById('cancel-speed-btn');
+            easyPresetBtn = document.getElementById('easy-preset');
+            normalPresetBtn = document.getElementById('normal-preset');
+            hardPresetBtn = document.getElementById('hard-preset');
+        }
         
         // Load images
         backgroundImage.src = "sprites/background-day.png";
